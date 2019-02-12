@@ -1,25 +1,11 @@
 import threading
+import RPi.GPIO as GPIO
+from periphery import SPI
 
-RASPBERRY = object()
-BEAGLEBONE = object()
-board = RASPBERRY
-try:
-    # Try with Raspberry PI imports first
-    import spidev
-    import RPi.GPIO as GPIO
-    SPIClass = spidev.SpiDev
-    def_pin_rst = 22
-    def_pin_irq = 18
-    def_pin_mode = GPIO.BOARD
-except ImportError:
-    # If they failed, try with Beaglebone
-    import Adafruit_BBIO.SPI as SPI
-    import Adafruit_BBIO.GPIO as GPIO
-    SPIClass = SPI.SPI
-    board = BEAGLEBONE
-    def_pin_rst = "P9_23"
-    def_pin_irq = "P9_15"
-    def_pin_mode = None
+def_pin_rst = 22
+def_pin_irq = 18
+def_pin_mode = GPIO.BOARD
+
 
 class RFID(object):
     pin_rst = 22
@@ -59,18 +45,14 @@ class RFID(object):
     irq = threading.Event()
 
     def __init__(self, bus=0, device=0, speed=1000000, pin_rst=def_pin_rst,
-            pin_ce=0, pin_irq=def_pin_irq, pin_mode = def_pin_mode):
+                 pin_ce=0, pin_irq=def_pin_irq, pin_mode=def_pin_mode):
         self.pin_rst = pin_rst
         self.pin_ce = pin_ce
         self.pin_irq = pin_irq
 
-        self.spi = SPIClass()
-        self.spi.open(bus, device)
-        if board == RASPBERRY:
-            self.spi.max_speed_hz = speed
-        else:
-            self.spi.mode = 0
-            self.spi.msh = speed
+        path = '/dev/spidev{bus}.{device}'.format(bus=bus, device=device)
+
+        self.spi = SPI(path, 0, speed)
 
         if pin_mode is not None:
             GPIO.setmode(pin_mode)
@@ -78,8 +60,11 @@ class RFID(object):
             GPIO.setup(pin_rst, GPIO.OUT)
             GPIO.output(pin_rst, 1)
         GPIO.setup(pin_irq, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.add_event_detect(pin_irq, GPIO.FALLING,
-                callback=self.irq_callback)
+        GPIO.add_event_detect(
+            pin_irq,
+            GPIO.FALLING,
+            callback=self.irq_callback
+        )
         if pin_ce != 0:
             GPIO.setup(pin_ce, GPIO.OUT)
             GPIO.output(pin_ce, 1)
@@ -93,13 +78,13 @@ class RFID(object):
         self.dev_write(0x2C, 0)
         self.dev_write(0x15, 0x40)
         self.dev_write(0x11, 0x3D)
-        self.dev_write(0x26, (self.antenna_gain<<4))
+        self.dev_write(0x26, (self.antenna_gain << 4))
         self.set_antenna(True)
 
     def spi_transfer(self, data):
         if self.pin_ce != 0:
             GPIO.output(self.pin_ce, 0)
-        r = self.spi.xfer2(data)
+        r = self.spi.transfer(data)
         if self.pin_ce != 0:
             GPIO.output(self.pin_ce, 1)
         return r
@@ -119,7 +104,7 @@ class RFID(object):
         self.dev_write(address, current & (~mask))
 
     def set_antenna(self, state):
-        if state == True:
+        if state:
             current = self.dev_read(self.reg_tx_control)
             if ~(current & 0x03):
                 self.set_bitmask(self.reg_tx_control, 0x03)
@@ -204,13 +189,17 @@ class RFID(object):
     def request(self, req_mode=0x26):
         """
         Requests for tag.
-        Returns (False, None) if no tag is present, otherwise returns (True, tag type)
+        Returns (False, None) if no tag is present, otherwise returns
+        (True, tag type)
         """
         error = True
         back_bits = 0
 
         self.dev_write(0x0D, 0x07)
-        (error, back_data, back_bits) = self.card_write(self.mode_transrec, [req_mode, ])
+        (error, back_data, back_bits) = self.card_write(
+            self.mode_transrec,
+            [req_mode]
+        )
 
         if error or (back_bits != 0x10):
             return (True, None)
@@ -231,7 +220,10 @@ class RFID(object):
         serial_number.append(self.act_anticl)
         serial_number.append(0x20)
 
-        (error, back_data, back_bits) = self.card_write(self.mode_transrec, serial_number)
+        (error, back_data, back_bits) = self.card_write(
+            self.mode_transrec,
+            serial_number
+        )
         if not error:
             if len(back_data) == 5:
                 for i in range(4):
@@ -284,7 +276,10 @@ class RFID(object):
         buf.append(crc[0])
         buf.append(crc[1])
 
-        (error, back_data, back_length) = self.card_write(self.mode_transrec, buf)
+        (error, back_data, back_length) = self.card_write(
+            self.mode_transrec,
+            buf
+        )
 
         if (not error) and (back_length == 0x18):
             return False
@@ -293,7 +288,8 @@ class RFID(object):
 
     def card_auth(self, auth_mode, block_address, key, uid):
         """
-        Authenticates to use specified block address. Tag must be selected using select_tag(uid) before auth.
+        Authenticates to use specified block address. Tag must be selected
+        using select_tag(uid) before auth.
         auth_mode -- RFID.auth_a or RFID.auth_b
         key -- list or tuple with six bytes key
         uid -- list or tuple with four bytes tag ID
@@ -347,7 +343,10 @@ class RFID(object):
         crc = self.calculate_crc(buf)
         buf.append(crc[0])
         buf.append(crc[1])
-        (error, back_data, back_length) = self.card_write(self.mode_transrec, buf)
+        (error, back_data, back_length) = self.card_write(
+            self.mode_transrec,
+            buf
+        )
 
         if len(back_data) != 16:
             error = True
@@ -365,7 +364,10 @@ class RFID(object):
         crc = self.calculate_crc(buf)
         buf.append(crc[0])
         buf.append(crc[1])
-        (error, back_data, back_length) = self.card_write(self.mode_transrec, buf)
+        (error, back_data, back_length) = self.card_write(
+            self.mode_transrec,
+            buf
+        )
         if not(back_length == 4) or not((back_data[0] & 0x0F) == 0x0A):
             error = True
 
@@ -377,7 +379,10 @@ class RFID(object):
             crc = self.calculate_crc(buf_w)
             buf_w.append(crc[0])
             buf_w.append(crc[1])
-            (error, back_data, back_length) = self.card_write(self.mode_transrec, buf_w)
+            (error, back_data, back_length) = self.card_write(
+                self.mode_transrec,
+                buf_w
+            )
             if not(back_length == 4) or not((back_data[0] & 0x0F) == 0x0A):
                 error = True
 

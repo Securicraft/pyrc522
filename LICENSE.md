@@ -1,4 +1,5 @@
 Copyright (c) 2016 Ondřej Ondryáš {ondryaso}
+              2019, Michael Fladischer <michael@fladi.at>
 
 Permission is hereby granted, free of charge, to any person
 obtaining a copy of this software and associated documentation
