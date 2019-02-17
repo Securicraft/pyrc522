@@ -9,7 +9,7 @@ setup(
     name='pyrc522',
     packages=find_packages(),
     include_package_data=True,
-    version='0.1.0',
+    version='0.1.1',
     description='Python library for SPI RFID RC522 module',
     long_description='Raspberry Pi Python library for SPI RFID RC522 module.',
     classifiers=[
