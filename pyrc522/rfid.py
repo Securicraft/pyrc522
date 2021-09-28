@@ -56,6 +56,7 @@ class RFID(object):
 
         if pin_mode is not None:
             GPIO.setmode(pin_mode)
+            GPIO.setwarnings(False)
         if pin_rst != 0:
             GPIO.setup(pin_rst, GPIO.OUT)
             GPIO.output(pin_rst, 1)
